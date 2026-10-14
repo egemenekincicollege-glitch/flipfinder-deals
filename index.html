@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="robots" content="noindex, nofollow">
+  <title>FlipFinder</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="FlipFinder">
+  <link rel="stylesheet" href="style.css">
+  <script src="online.js" defer></script>
+</head>
+<body>
+<header class="top">
+  <div class="top-row">
+    <span class="brand"><img src="icon-192.png" alt="">FlipFinder</span>
+    <span class="spacer"></span>
+    <button class="small" id="reload" hidden>↻ Refresh</button>
+    <button class="small" id="lock" hidden>Lock</button>
+  </div>
+  <nav class="tabs" id="tabs" hidden>
+    <a href="#deals" class="active" data-tab="deals">Deals</a>
+    <a href="#ask" data-tab="ask">Ask seller</a>
+  </nav>
+</header>
+<main>
+  <form id="unlock" class="card" hidden>
+    <h2 style="margin-top:0">Unlock</h2>
+    <p class="muted small">Enter the online page password (SITE_PASSWORD in the .env file on your PC).</p>
+    <input type="password" id="pw" autocomplete="current-password" placeholder="Password" required>
+    <label class="small" style="color:var(--text);display:flex;gap:8px;align-items:center;margin-top:8px">
+      <input type="checkbox" id="remember" checked style="width:auto"> Remember on this device</label>
+    <p><button class="primary">Unlock</button></p>
+    <div id="pw-error" class="banner bad" hidden>Wrong password.</div>
+  </form>
+  <div id="status"></div>
+  <section id="deals"></section>
+  <section id="ask" hidden></section>
+</main>
+</body>
+</html>

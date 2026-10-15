@@ -290,7 +290,9 @@ document.addEventListener("DOMContentLoaded", () => {
   $("unlock").addEventListener("submit", (e) => { e.preventDefault(); start($("pw").value, $("remember").checked); });
   $("lock").addEventListener("click", () => { store("del"); location.reload(); });
   $("run").addEventListener("click", runNow);
-  $("reload").addEventListener("click", () => { const pw = store("get"); pw ? start(pw, true) : location.reload(); });
+  $("reload").addEventListener("click", () => {
+    if (store("get")) location.reload(); else if (PASSWORD) start(PASSWORD, false); else location.reload();
+  });
   for (const a of document.querySelectorAll("#tabs a")) a.addEventListener("click", (e) => { e.preventDefault(); showTab(a.dataset.tab); });
   const saved = store("get");
   if (saved) start(saved, true); else $("unlock").hidden = false;

@@ -4,6 +4,8 @@
 "use strict";
 
 const STORE_KEY = "flipfinder-site-pw";
+let DATA = null;      // last decrypted snapshot
+let PASSWORD = null;  // kept in memory after unlocking (needed to sign Run now)
 const $ = (id) => document.getElementById(id);
 
 function store(action, value) {
@@ -133,7 +135,9 @@ function render(data) {
     : [h("div", { class: "card muted" }, "No deals right now.")]));
   $("ask").replaceChildren(...(data.ask.length ? data.ask.map(askCard)
     : [h("div", { class: "card muted" }, "Nothing to ask right now.")]));
+  DATA = data;
   $("tabs").hidden = $("reload").hidden = $("lock").hidden = false;
+  $("run").hidden = !data.command;
   $("unlock").hidden = true;
 }
 
@@ -146,12 +150,82 @@ async function load(password) {
 async function start(password, remember) {
   try {
     render(await load(password));
+    PASSWORD = password;
     if (remember) store("set", password);
   } catch (e) {
     store("del");
     $("unlock").hidden = false;
     $("pw-error").hidden = !(e instanceof DOMException || e.name === "OperationError");
     if ($("pw-error").hidden) $("status").replaceChildren(h("div", { class: "banner bad" }, String(e.message || e)));
+  }
+}
+
+// ---------------------------------------------------------------- Run now (via ntfy)
+// The PC (flipfinder/remote.py) checks this signature: HMAC-SHA256(sha256("flipfinder-command:" + password),
+// "run|<unix ts>|<nonce>"), so only someone with the page password can start a search.
+
+async function signCommand(action, ts, nonce) {
+  const enc = new TextEncoder();
+  const raw = await crypto.subtle.digest("SHA-256", enc.encode("flipfinder-command:" + PASSWORD));
+  const key = await crypto.subtle.importKey("raw", raw, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, enc.encode(`${action}|${ts}|${nonce}`)));
+  return Array.from(sig, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function runStatus(kind, text, spinning) {
+  $("runbox").replaceChildren(h("div", { class: "banner " + kind },
+    spinning ? h("span", { class: "spinner", style: "margin-right:8px;vertical-align:-2px" }) : null, text));
+}
+
+async function waitForNewData(before) {
+  for (let i = 0; i < 15; i++) {  // GitHub Pages takes ~1 minute to update
+    await new Promise((r) => setTimeout(r, 20000));
+    try {
+      const data = await load(PASSWORD);
+      if (data.generated_at !== before) { render(data); return true; }
+    } catch (e) { /* keep waiting */ }
+  }
+  return false;
+}
+
+async function runNow() {
+  const c = DATA && DATA.command;
+  if (!c || !PASSWORD) return;
+  $("run").disabled = true;
+  const ts = Math.floor(Date.now() / 1000);
+  const nonce = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, "0")).join("");
+  const base = `${c.server}/${c.topic}`;
+  const events = new EventSource(`${base}/sse?since=${ts - 5}`);
+  let answered = false;
+  const finish = () => { events.close(); $("run").disabled = false; };
+  const noAnswer = setTimeout(() => {
+    if (!answered) { runStatus("warn", "Your PC didn't answer. It's probably off or asleep."); finish(); }
+  }, 30000);
+  events.onmessage = async (ev) => {
+    let reply;
+    try { reply = JSON.parse(JSON.parse(ev.data).message); } catch (e) { return; }
+    if (!reply || !reply.reply) return;
+    answered = true;
+    clearTimeout(noAnswer);
+    if (reply.reply === "started") runStatus("info", reply.text, true);
+    else if (reply.reply === "busy") { runStatus("warn", reply.text); finish(); }
+    else if (reply.reply === "done") {
+      events.close();
+      runStatus("good", reply.text + " Updating this page…", true);
+      const updated = await waitForNewData(DATA.generated_at);
+      runStatus(updated ? "good" : "warn", updated ? reply.text : reply.text + " Tap ↻ in a minute to see the results.");
+      $("run").disabled = false;
+    }
+  };
+  runStatus("info", "Asking your PC to search…", true);
+  try {
+    const sig = await signCommand("run", ts, nonce);
+    const resp = await fetch(base, { method: "POST", body: JSON.stringify({ action: "run", ts, nonce, sig }) });
+    if (!resp.ok) throw new Error("ntfy answered " + resp.status);
+  } catch (e) {
+    clearTimeout(noAnswer);
+    runStatus("bad", "Could not send the request: " + (e.message || e));
+    finish();
   }
 }
 
@@ -164,6 +238,7 @@ function showTab(name) {
 document.addEventListener("DOMContentLoaded", () => {
   $("unlock").addEventListener("submit", (e) => { e.preventDefault(); start($("pw").value, $("remember").checked); });
   $("lock").addEventListener("click", () => { store("del"); location.reload(); });
+  $("run").addEventListener("click", runNow);
   $("reload").addEventListener("click", () => { const pw = store("get"); pw ? start(pw, true) : location.reload(); });
   for (const a of document.querySelectorAll("#tabs a")) a.addEventListener("click", (e) => { e.preventDefault(); showTab(a.dataset.tab); });
   const saved = store("get");

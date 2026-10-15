@@ -126,16 +126,67 @@ function askCard(a) {
       h("a", { class: "btn", href: a.url, target: "_blank", rel: "noopener" }, "Open listing ↗")));
 }
 
+// ---------------------------------------------------------------- budget + sort (same rules as views.py)
+const SORTS = { best: "Best (profit, then safety)", profit: "Biggest profit", margin: "Best % return",
+  cheapest: "Cheapest", closest: "Closest", newest: "Newest", safest: "Safest" };
+const BUDGETS = [50, 100, 200, 300, 500];
+const RISK = { low: 0, medium: 1, high: 2 };
+const VIEW_KEY = "flipfinder-view";
+let VIEW = { budget: null, sort: "best" };
+try { VIEW = Object.assign(VIEW, JSON.parse(localStorage.getItem(VIEW_KEY) || "{}")); } catch (e) { /* defaults */ }
+
+const payPrice = (d) => (d.good_at_asking ? d.asking : Math.min(d.asking, d.max_offer));
+const expProfit = (d) => (d.good_at_asking ? d.profit : d.profit_at_offer);
+
+function arrange(deals) {
+  const list = VIEW.budget === null ? deals.slice() : deals.filter((d) => payPrice(d) <= VIEW.budget);
+  const keys = {
+    profit: (d) => -expProfit(d),
+    margin: (d) => -(payPrice(d) ? expProfit(d) / payPrice(d) : 0),
+    cheapest: payPrice,
+    closest: (d) => (d.distance_km === null ? 1e9 : d.distance_km),
+    newest: (d) => -(d.posted_at ? new Date(d.posted_at).getTime() : 0),
+    safest: (d) => (RISK[d.risk_level] ?? 3) * 1e6 - expProfit(d),
+  };
+  const key = keys[VIEW.sort];
+  return key ? list.sort((a, b) => key(a) - key(b)) : list;
+}
+
+function saveView() { try { localStorage.setItem(VIEW_KEY, JSON.stringify(VIEW)); } catch (e) { /* ignore */ } }
+
+function controls(total, shown) {
+  const chip = (label, value) => h("button", {
+    type: "button", class: "chip" + (VIEW.budget === value ? " on" : ""),
+    onclick: () => { VIEW.budget = value; saveView(); renderDeals(); },
+  }, label);
+  const select = h("select", { style: "flex:1;width:auto", onchange: (e) => { VIEW.sort = e.target.value; saveView(); renderDeals(); } },
+    Object.entries(SORTS).map(([k, label]) => h("option", { value: k, selected: VIEW.sort === k ? "" : null }, label)));
+  const hidden = total - shown;
+  return h("div", { class: "card" },
+    h("label", {}, "My budget"),
+    h("div", { class: "chips" }, chip("Any", null), BUDGETS.map((b) => chip("€" + b, b))),
+    h("div", { class: "row", style: "margin-top:12px" }, h("label", { style: "margin:0" }, "Sort by"), select),
+    hidden > 0 ? h("p", { class: "small muted", style: "margin:10px 0 0" },
+      `${hidden} more deal${hidden === 1 ? "" : "s"} above €${VIEW.budget}.`) : null);
+}
+
+function renderDeals() {
+  if (!DATA) return;
+  const shown = arrange(DATA.deals);
+  $("deals").replaceChildren(controls(DATA.deals.length, shown.length),
+    ...(shown.length ? shown.map(dealCard)
+      : [h("div", { class: "card muted" }, DATA.deals.length ? "No deals within this budget right now." : "No deals right now.")]));
+}
+
 function render(data) {
   const run = data.last_run ? `Last search ${ago(data.last_run.at)} (${data.last_run.status})` : "No search yet";
   const old = (Date.now() - new Date(data.generated_at).getTime()) / 3600000 > 3;
   $("status").replaceChildren(h("div", { class: "banner " + (old ? "warn" : "info") },
     `Updated ${ago(data.generated_at)}. ${run}.` + (old ? " Your PC may be off, so these deals may be stale." : "")));
-  $("deals").replaceChildren(...(data.deals.length ? data.deals.map(dealCard)
-    : [h("div", { class: "card muted" }, "No deals right now.")]));
   $("ask").replaceChildren(...(data.ask.length ? data.ask.map(askCard)
     : [h("div", { class: "card muted" }, "Nothing to ask right now.")]));
   DATA = data;
+  renderDeals();
   $("tabs").hidden = $("reload").hidden = $("lock").hidden = false;
   $("run").hidden = !data.command;
   $("unlock").hidden = true;

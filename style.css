@@ -210,3 +210,13 @@ th { color: var(--muted); font-weight: 400; font-size: 12px; text-transform: upp
   .profit { font-size: 24px; }
   .hide-sm { display: none; }
 }
+
+
+/* ---------- budget chips ---------- */
+.chips { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding: 2px 0; }
+.chips::-webkit-scrollbar { display: none; }
+.chip {
+  flex: none; padding: 7px 14px; border-radius: 999px; background: var(--fill); color: var(--text);
+  font-size: 15px; font-weight: 500; border: 0; cursor: pointer; min-height: 0;
+}
+.chip.on { background: var(--accent); color: var(--accent-text); }

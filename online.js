@@ -286,6 +286,10 @@ function showTab(name) {
   $("ask").hidden = name !== "ask";
 }
 
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js").catch(() => { /* not critical */ });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   $("unlock").addEventListener("submit", (e) => { e.preventDefault(); start($("pw").value, $("remember").checked); });
   $("lock").addEventListener("click", () => { store("del"); location.reload(); });
